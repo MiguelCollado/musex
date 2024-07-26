@@ -1,75 +1,36 @@
 import {inject, injectable} from 'inversify';
-import {toSeconds, parse} from 'iso8601-duration';
-import got, {Got} from 'got';
+import {parse, toSeconds} from 'iso8601-duration';
 import ytsr, {Video} from '@distube/ytsr';
 import PQueue from 'p-queue';
-import {SongMetadata, QueuedPlaylist, MediaSource} from './player.js';
+import {MediaSource, QueuedPlaylist, SongMetadata} from './player.js';
 import {TYPES} from '../types.js';
 import Config from './config.js';
 import KeyValueCacheProvider from './key-value-cache.js';
 import {ONE_HOUR_IN_SECONDS, ONE_MINUTE_IN_SECONDS} from '../utils/constants.js';
 import {parseTime} from '../utils/time.js';
 import getYouTubeID from 'get-youtube-id';
+import {youtube, youtube_v3} from '@googleapis/youtube';
 
-interface VideoDetailsResponse {
-  id: string;
-  contentDetails: {
-    videoId: string;
-    duration: string;
-  };
-  snippet: {
-    title: string;
-    channelTitle: string;
-    liveBroadcastContent: string;
-    description: string;
-    thumbnails: {
-      medium: {
-        url: string;
-      };
-    };
-  };
-}
-
-interface PlaylistResponse {
-  id: string;
-  contentDetails: {
-    itemCount: number;
-  };
-  snippet: {
-    title: string;
-  };
-}
-
-interface PlaylistItemsResponse {
-  items: PlaylistItem[];
-  nextPageToken?: string;
-}
-
-interface PlaylistItem {
-  id: string;
-  contentDetails: {
-    videoId: string;
-  };
-}
+// Youtube API v3 types
+import Schema$Video = youtube_v3.Schema$Video;
+import Schema$PlaylistItem = youtube_v3.Schema$PlaylistItem;
 
 @injectable()
 export default class {
   private readonly youtubeKey: string;
   private readonly cache: KeyValueCacheProvider;
   private readonly ytsrQueue: PQueue;
-  private readonly got: Got;
+  private readonly youtube: youtube_v3.Youtube;
 
   constructor(@inject(TYPES.Config) config: Config, @inject(TYPES.KeyValueCache) cache: KeyValueCacheProvider) {
     this.youtubeKey = config.YOUTUBE_API_KEY;
     this.cache = cache;
     this.ytsrQueue = new PQueue({concurrency: 4});
 
-    this.got = got.extend({
-      prefixUrl: 'https://www.googleapis.com/youtube/v3/',
-      searchParams: {
-        key: this.youtubeKey,
-        responseType: 'json',
-      },
+    this.youtube = youtube({
+      version: 'v3',
+      auth: this.youtubeKey,
+      responseType: 'json',
     });
   }
 
@@ -103,7 +64,7 @@ export default class {
 
   async getVideo(url: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
     const result = await this.getVideosByID([String(getYouTubeID(url))]);
-    const video = result.at(0);
+    const video = result?.at(0);
 
     if (!video) {
       throw new Error('Video could not be found.');
@@ -114,44 +75,40 @@ export default class {
 
   async getPlaylist(listId: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
     const playlistParams = {
-      searchParams: {
-        part: 'id, snippet, contentDetails',
-        id: listId,
-      },
+      part: ['id', 'snippet', 'contentDetails'],
+      id: [listId],
     };
-    const {items: playlists} = await this.cache.wrap(
-      async () => this.got('playlists', playlistParams).json() as Promise<{items: PlaylistResponse[]}>,
+    const {data: {items: playlists}} = await this.cache.wrap(
+      async () => this.youtube.playlists.list(playlistParams),
       playlistParams,
       {
         expiresIn: ONE_MINUTE_IN_SECONDS,
       },
     );
 
-    const playlist = playlists.at(0)!;
+    const playlist = playlists?.at(0);
 
     if (!playlist) {
       throw new Error('Playlist could not be found.');
     }
 
-    const playlistVideos: PlaylistItem[] = [];
+    const playlistVideos: Schema$PlaylistItem[] = [];
     const videoDetailsPromises: Array<Promise<void>> = [];
-    const videoDetails: VideoDetailsResponse[] = [];
+    const videoDetails: Schema$Video[] = [];
 
-    let nextToken: string | undefined;
+    let nextToken: string | null | undefined;
 
-    while (playlistVideos.length < playlist.contentDetails.itemCount) {
+    while (playlistVideos.length < (playlist?.contentDetails?.itemCount ?? 0)) {
       const playlistItemsParams = {
-        searchParams: {
-          part: 'id, contentDetails',
-          playlistId: listId,
-          maxResults: '50',
-          pageToken: nextToken,
-        },
+        part: ['id', 'contentDetails'],
+        playlistId: listId,
+        maxResults: 50,
+        pageToken: nextToken === null ? undefined : nextToken,
       };
 
       // eslint-disable-next-line no-await-in-loop
-      const {items, nextPageToken} = await this.cache.wrap(
-        async () => this.got('playlistItems', playlistItemsParams).json() as Promise<PlaylistItemsResponse>,
+      const {data: {items, nextPageToken}} = await this.cache.wrap(
+        async () => this.youtube.playlistItems.list(playlistItemsParams),
         playlistItemsParams,
         {
           expiresIn: ONE_MINUTE_IN_SECONDS,
@@ -159,26 +116,33 @@ export default class {
       );
 
       nextToken = nextPageToken;
+
+      if (!items) {
+        break;
+      }
+
       playlistVideos.push(...items);
 
       // Start fetching extra details about videos
       // PlaylistItem misses some details, eg. if the video is a livestream
       videoDetailsPromises.push((async () => {
-        const videoDetailItems = await this.getVideosByID(items.map(item => item.contentDetails.videoId));
-        videoDetails.push(...videoDetailItems);
+        const videoDetailItems = await this.getVideosByID(items.map(item => item.contentDetails?.videoId ?? ''));
+        if (videoDetailItems) {
+          videoDetails.push(...videoDetailItems);
+        }
       })());
     }
 
     await Promise.all(videoDetailsPromises);
 
-    const queuedPlaylist = {title: playlist.snippet.title, source: playlist.id};
+    const queuedPlaylist = {title: playlist.snippet?.title ?? '', source: playlist.id ?? ''};
 
     const songsToReturn: SongMetadata[] = [];
 
     for (const video of playlistVideos) {
       try {
         songsToReturn.push(...this.getMetadataFromVideo({
-          video: videoDetails.find((i: {id: string}) => i.id === video.contentDetails.videoId)!,
+          video: videoDetails.find(i => i.id === video.contentDetails?.videoId)!,
           queuedPlaylist,
           shouldSplitChapters,
         }));
@@ -196,27 +160,27 @@ export default class {
     queuedPlaylist,
     shouldSplitChapters,
   }: {
-    video: VideoDetailsResponse; // | YoutubePlaylistItem;
+    video: Schema$Video; // | YoutubePlaylistItem;
     queuedPlaylist?: QueuedPlaylist;
     shouldSplitChapters?: boolean;
   }): SongMetadata[] {
     const base: SongMetadata = {
       source: MediaSource.Youtube,
-      title: video.snippet.title,
-      artist: video.snippet.channelTitle,
-      length: toSeconds(parse(video.contentDetails.duration)),
+      title: video.snippet?.title ?? 'Unknown title',
+      artist: video.snippet?.channelTitle ?? 'Unknown artist',
+      length: toSeconds(parse(video.contentDetails?.duration ?? 'PT0S')),
       offset: 0,
-      url: video.id,
+      url: video?.id ?? '',
       playlist: queuedPlaylist ?? null,
-      isLive: video.snippet.liveBroadcastContent === 'live',
-      thumbnailUrl: video.snippet.thumbnails.medium.url,
+      isLive: video.snippet?.liveBroadcastContent === 'live',
+      thumbnailUrl: video.snippet?.thumbnails?.medium?.url ?? '',
     };
 
     if (!shouldSplitChapters) {
       return [base];
     }
 
-    const chapters = this.parseChaptersFromDescription(video.snippet.description, base.length);
+    const chapters = this.parseChaptersFromDescription(video.snippet?.description, base.length);
 
     if (!chapters) {
       return [base];
@@ -236,7 +200,11 @@ export default class {
     return tracks;
   }
 
-  private parseChaptersFromDescription(description: string, videoDurationSeconds: number) {
+  private parseChaptersFromDescription(description: string | undefined | null, videoDurationSeconds: number) {
+    if (!description) {
+      return null;
+    }
+
     const map = new Map<string, {offset: number; length: number}>();
     let foundFirstTimestamp = false;
 
@@ -278,16 +246,14 @@ export default class {
     return map;
   }
 
-  private async getVideosByID(videoIDs: string[]): Promise<VideoDetailsResponse[]> {
+  private async getVideosByID(videoIDs: string[]): Promise<youtube_v3.Schema$Video[] | undefined> {
     const p = {
-      searchParams: {
-        part: 'id, snippet, contentDetails',
-        id: videoIDs.join(','),
-      },
+      part: ['id', 'snippet', 'contentDetails'],
+      id: videoIDs,
     };
 
-    const {items: videos} = await this.cache.wrap(
-      async () => this.got('videos', p).json() as Promise<{items: VideoDetailsResponse[]}>,
+    const {data: {items: videos}} = await this.cache.wrap(
+      async () => this.youtube.videos.list(p),
       p,
       {
         expiresIn: ONE_HOUR_IN_SECONDS,
