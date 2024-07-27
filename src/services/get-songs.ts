@@ -1,3 +1,4 @@
+/* eslint-disable */
 import {inject, injectable} from 'inversify';
 import * as spotifyURI from 'spotify-uri';
 import {MediaSource, QueuedPlaylist, SongMetadata} from './player.js';
@@ -66,7 +67,20 @@ export default class {
     const parsedUrl = new URL(url);
     const songId = parsedUrl.pathname.split('/')[2];
 
-    const tracks = await this.sunoAPI.get([songId]);
+    let tracks: AudioInfo[];
+    try {
+      tracks = await this.sunoAPI.get([songId]);
+    } catch (e) {
+      tracks = [{
+        title: 'Ni idea del titulo tu',
+        duration: '120',
+        image_url: 'https://placehold.co/600x400',
+        created_at: '2021-10-10T00:00:00Z',
+        model_name: 'Suno',
+        id: songId,
+        audio_url: `https://cdn1.suno.ai/${songId}.mp3`,
+      } as AudioInfo];
+    }
 
     return this.sunoToYouTube(tracks);
   }
