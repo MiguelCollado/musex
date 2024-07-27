@@ -70,10 +70,7 @@ export default class {
     let tracks: AudioInfo[] | {detail: string}[] = [];
     try {
       tracks = await this.sunoAPI.get([songId]);
-
-      // @ts-ignore
-      const isBadRequest = tracks.some(track => Object.hasOwn(track, 'detail') && track.detail === "Unauthorized");
-      if (isBadRequest) {
+      if (!tracks || tracks.length === 0) {
         tracks = [{
           title: 'Ni idea del titulo tu',
           duration: '120',
