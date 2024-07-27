@@ -8,8 +8,8 @@ import {wrapper} from 'axios-cookiejar-support';
 import {CookieJar} from 'tough-cookie';
 import {sleep} from '../utils/axios.js';
 import {inject, injectable} from 'inversify';
-import {TYPES} from '../types';
-import ThirdParty from './third-party';
+import {TYPES} from '../types.js';
+import ThirdParty from './third-party.js';
 
 const logger = pino();
 export const DEFAULT_MODEL = 'chirp-v3-5';
