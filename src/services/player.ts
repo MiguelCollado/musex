@@ -1,4 +1,4 @@
-import {VoiceChannel, Snowflake} from 'discord.js';
+import {Snowflake, VoiceChannel} from 'discord.js';
 import {Readable} from 'stream';
 import hasha from 'hasha';
 import ytdl, {videoFormat} from '@distube/ytdl-core';
@@ -8,9 +8,11 @@ import shuffle from 'array-shuffle';
 import {
   AudioPlayer,
   AudioPlayerState,
-  AudioPlayerStatus, AudioResource,
+  AudioPlayerStatus,
+  AudioResource,
   createAudioPlayer,
-  createAudioResource, DiscordGatewayAdapterCreator,
+  createAudioResource,
+  DiscordGatewayAdapterCreator,
   joinVoiceChannel,
   StreamType,
   VoiceConnection,

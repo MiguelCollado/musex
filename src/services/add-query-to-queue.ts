@@ -109,6 +109,10 @@ export default class AddQueryToQueue {
         }
 
         newSongs.push(...convertedSongs);
+      } else if (url.host === 'suno.com') {
+        const convertedSongs = await this.getSongs.sunoSource(query);
+
+        newSongs.push(...convertedSongs);
       } else {
         const song = await this.getSongs.httpLiveStream(query);
 

@@ -28,6 +28,7 @@ import Next from './commands/next.js';
 import NowPlaying from './commands/now-playing.js';
 import Pause from './commands/pause.js';
 import Play from './commands/play.js';
+import PlaySuno from './commands/play-suno.js';
 import QueueCommand from './commands/queue.js';
 import Remove from './commands/remove.js';
 import Replay from './commands/replay.js';
@@ -41,6 +42,7 @@ import Volume from './commands/volume.js';
 import ThirdParty from './services/third-party.js';
 import FileCacheProvider from './services/file-cache.js';
 import KeyValueCacheProvider from './services/key-value-cache.js';
+import {SunoAPI} from './services/suno-api.js';
 
 const container = new Container();
 
@@ -62,6 +64,7 @@ container.bind<GetSongs>(TYPES.Services.GetSongs).to(GetSongs).inSingletonScope(
 container.bind<AddQueryToQueue>(TYPES.Services.AddQueryToQueue).to(AddQueryToQueue).inSingletonScope();
 container.bind<YoutubeAPI>(TYPES.Services.YoutubeAPI).to(YoutubeAPI).inSingletonScope();
 container.bind<SpotifyAPI>(TYPES.Services.SpotifyAPI).to(SpotifyAPI).inSingletonScope();
+container.bind<SunoAPI>(TYPES.Services.SunoAPI).to(SunoAPI).inSingletonScope();
 
 // Commands
 [
@@ -77,6 +80,7 @@ container.bind<SpotifyAPI>(TYPES.Services.SpotifyAPI).to(SpotifyAPI).inSingleton
   NowPlaying,
   Pause,
   Play,
+  PlaySuno,
   QueueCommand,
   Remove,
   Replay,

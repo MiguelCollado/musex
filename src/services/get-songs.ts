@@ -1,19 +1,22 @@
 import {inject, injectable} from 'inversify';
 import * as spotifyURI from 'spotify-uri';
-import {SongMetadata, QueuedPlaylist, MediaSource} from './player.js';
+import {MediaSource, QueuedPlaylist, SongMetadata} from './player.js';
 import {TYPES} from '../types.js';
 import ffmpeg from 'fluent-ffmpeg';
 import YoutubeAPI from './youtube-api.js';
 import SpotifyAPI, {SpotifyTrack} from './spotify-api.js';
+import {AudioInfo, SunoAPI} from './suno-api.js';
 
 @injectable()
 export default class {
   private readonly youtubeAPI: YoutubeAPI;
   private readonly spotifyAPI: SpotifyAPI;
+  private readonly sunoAPI: SunoAPI;
 
-  constructor(@inject(TYPES.Services.YoutubeAPI) youtubeAPI: YoutubeAPI, @inject(TYPES.Services.SpotifyAPI) spotifyAPI: SpotifyAPI) {
+  constructor(@inject(TYPES.Services.YoutubeAPI) youtubeAPI: YoutubeAPI, @inject(TYPES.Services.SpotifyAPI) spotifyAPI: SpotifyAPI, @inject(TYPES.Services.SunoAPI) sunoAPI: SunoAPI) {
     this.youtubeAPI = youtubeAPI;
     this.spotifyAPI = spotifyAPI;
+    this.sunoAPI = sunoAPI;
   }
 
   async youtubeVideoSearch(query: string, shouldSplitChapters: boolean): Promise<SongMetadata[]> {
@@ -56,6 +59,16 @@ export default class {
         return [[], 0, 0];
       }
     }
+  }
+
+  async sunoSource(url: string): Promise<SongMetadata[]> {
+    // https://suno.com/song/1a95710f-17fa-41fc-9477-c63f4bafb1f7
+    const parsedUrl = new URL(url);
+    const songId = parsedUrl.pathname.split('/')[2];
+
+    const tracks = await this.sunoAPI.get([songId]);
+
+    return this.sunoToYouTube(tracks);
   }
 
   async httpLiveStream(url: string): Promise<SongMetadata> {
@@ -103,5 +116,24 @@ export default class {
     }, []);
 
     return [songs, nSongsNotFound, tracks.length];
+  }
+
+  private async sunoToYouTube(tracks: AudioInfo[]): Promise<SongMetadata[]> {
+    // Count songs that couldn't be found
+    const track = tracks[0];
+    return [
+      {
+        url: track.audio_url!,
+        artist: track.model_name,
+        isLive: false,
+        playlist: null,
+        source: MediaSource.HLS,
+        thumbnailUrl: track.image_url!,
+        // eslint-disable-next-line radix
+        length: parseInt(track.duration ?? '0'),
+        offset: 0,
+        title: track.title!,
+      },
+    ];
   }
 }

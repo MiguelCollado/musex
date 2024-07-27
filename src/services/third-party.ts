@@ -3,10 +3,12 @@ import SpotifyWebApi from 'spotify-web-api-node';
 import pRetry from 'p-retry';
 import {TYPES} from '../types.js';
 import Config from './config.js';
+import {Suno} from './suno-api.js';
 
 @injectable()
 export default class ThirdParty {
   readonly spotify: SpotifyWebApi;
+  readonly suno: Suno;
 
   private spotifyTokenTimerId?: NodeJS.Timeout;
 
@@ -16,7 +18,14 @@ export default class ThirdParty {
       clientSecret: config.SPOTIFY_CLIENT_SECRET,
     });
 
+    if (!process.env.SUNO_COOKIE) {
+      console.log('Environment does not contain SUNO_COOKIE.', process.env);
+    }
+
+    this.suno = new Suno(process.env.SUNO_COOKIE ?? '');
+
     void this.refreshSpotifyToken();
+    void this.suno.init();
   }
 
   cleanup() {
