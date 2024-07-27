@@ -6,7 +6,7 @@ import UserAgent from 'user-agents';
 import pino from 'pino';
 import {wrapper} from 'axios-cookiejar-support';
 import {CookieJar} from 'tough-cookie';
-import {sleep} from '../utils/axios';
+import {sleep} from '../utils/axios.js';
 import {inject, injectable} from 'inversify';
 import {TYPES} from '../types';
 import ThirdParty from './third-party';
