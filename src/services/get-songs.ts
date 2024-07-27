@@ -67,9 +67,23 @@ export default class {
     const parsedUrl = new URL(url);
     const songId = parsedUrl.pathname.split('/')[2];
 
-    let tracks: AudioInfo[];
+    let tracks: AudioInfo[] | {detail: string}[] = [];
     try {
       tracks = await this.sunoAPI.get([songId]);
+
+      // @ts-ignore
+      const isBadRequest = tracks.some(track => Object.hasOwn(track, 'detail') && track.detail === "Unauthorized");
+      if (isBadRequest) {
+        tracks = [{
+          title: 'Ni idea del titulo tu',
+          duration: '120',
+          image_url: 'https://placehold.co/600x400',
+          created_at: '2021-10-10T00:00:00Z',
+          model_name: 'Suno',
+          id: songId,
+          audio_url: `https://cdn1.suno.ai/${songId}.mp3`,
+        } as AudioInfo];
+      }
     } catch (e) {
       tracks = [{
         title: 'Ni idea del titulo tu',
@@ -82,6 +96,7 @@ export default class {
       } as AudioInfo];
     }
 
+    // @ts-ignore
     return this.sunoToYouTube(tracks);
   }
 

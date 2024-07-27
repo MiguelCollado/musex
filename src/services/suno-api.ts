@@ -40,7 +40,7 @@ export class SunoAPI {
     this.suno = thirdParty.suno;
   }
 
-  public async get(songIds?: string[]): Promise<AudioInfo[]> {
+  public async get(songIds?: string[]): Promise<AudioInfo[] | {detail: string}[] > {
     return this.suno.get(songIds);
   }
 }
