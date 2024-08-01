@@ -97,6 +97,7 @@
     "array-shuffle": "^3.0.0",
     "axios": "^1.7.2",
     "axios-cookiejar-support": "^5.0.2",
+    "cheerio": "^1.0.0-rc.12",
     "debug": "^4.3.3",
     "delay": "^5.0.0",
     "discord-api-types": "0.32.1",

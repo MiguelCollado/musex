@@ -1,5 +1,6 @@
 /* eslint-disable */
 import {inject, injectable} from 'inversify';
+import * as cheerio from 'cheerio';
 import * as spotifyURI from 'spotify-uri';
 import {MediaSource, QueuedPlaylist, SongMetadata} from './player.js';
 import {TYPES} from '../types.js';
@@ -71,10 +72,11 @@ export default class {
     try {
       tracks = await this.sunoAPI.get([songId]);
       if (!tracks || tracks.length === 0) {
+        const songInfo = await this.getMetadataFromHTML(songId);
         tracks = [{
-          title: 'Ni idea del titulo tu',
+          title: songInfo.title,
           duration: '120',
-          image_url: 'https://placehold.co/600x400',
+          image_url: songInfo.image,
           created_at: '2021-10-10T00:00:00Z',
           model_name: 'Suno',
           id: songId,
@@ -82,10 +84,11 @@ export default class {
         } as AudioInfo];
       }
     } catch (e) {
+      const songInfo = await this.getMetadataFromHTML(songId);
       tracks = [{
-        title: 'Ni idea del titulo tu',
+        title: songInfo.title,
         duration: '120',
-        image_url: 'https://placehold.co/600x400',
+        image_url: songInfo.image,
         created_at: '2021-10-10T00:00:00Z',
         model_name: 'Suno',
         id: songId,
@@ -161,5 +164,21 @@ export default class {
         title: track.title!,
       },
     ];
+  }
+
+  private async getMetadataFromHTML(songId: string) {
+    const html = await fetch(`https://suno.com/song/${songId}`).then(res => res.text())
+    const $ = cheerio.load(html)
+    const titleRaw = $('title').text()
+
+    const title = titleRaw.split(' by ')[0]
+    const author = titleRaw.split(' by ')[1].replace(' | Suno', '')
+    const image = $('meta[property="og:image"]').attr('content')
+
+    return {
+      title,
+      author,
+      image
+    }
   }
 }
