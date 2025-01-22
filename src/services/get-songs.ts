@@ -70,19 +70,16 @@ export default class {
 
     let tracks: AudioInfo[] | {detail: string}[] = [];
     try {
-      tracks = await this.sunoAPI.get([songId]);
-      if (!tracks || tracks.length === 0) {
-        const songInfo = await this.getMetadataFromHTML(songId);
-        tracks = [{
-          title: songInfo.title,
-          duration: '120',
-          image_url: songInfo.image,
-          created_at: '2021-10-10T00:00:00Z',
-          model_name: 'Suno',
-          id: songId,
-          audio_url: `https://cdn1.suno.ai/${songId}.mp3`,
-        } as AudioInfo];
-      }
+      const songInfo = await this.getMetadataFromHTML(songId);
+      tracks = [{
+        title: songInfo.title,
+        duration: '120',
+        image_url: songInfo.image,
+        created_at: '2021-10-10T00:00:00Z',
+        model_name: songInfo.author,
+        id: songId,
+        audio_url: `https://cdn1.suno.ai/${songId}.mp3`,
+      } as AudioInfo];
     } catch (e) {
       const songInfo = await this.getMetadataFromHTML(songId);
       tracks = [{
@@ -90,12 +87,13 @@ export default class {
         duration: '120',
         image_url: songInfo.image,
         created_at: '2021-10-10T00:00:00Z',
-        model_name: 'Suno',
+        model_name: songInfo.author,
         id: songId,
         audio_url: `https://cdn1.suno.ai/${songId}.mp3`,
       } as AudioInfo];
     }
 
+    console.log(tracks);
     // @ts-ignore
     return this.sunoToYouTube(tracks);
   }
@@ -171,8 +169,8 @@ export default class {
     const $ = cheerio.load(html)
     const titleRaw = $('title').text()
 
-    const title = titleRaw.split(' by ')[0]
-    const author = titleRaw.split(' by ')[1].replace(' | Suno', '')
+    const title = titleRaw.split('by')[0].trim()
+    const author = titleRaw.split('by')[1].replace(' | Suno', '').trim()
     const image = $('meta[property="og:image"]').attr('content')
 
     return {
